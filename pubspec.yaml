@@ -28,6 +28,22 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # Networking
+  dio: ^5.7.0
+
+  # State management
+  flutter_bloc: ^9.1.0
+  bloc: ^9.0.0
+
+  # Value equality for entities / states
+  equatable: ^2.0.7
+
+  # Functional error handling (Either<Failure, Success>)
+  dartz: ^0.10.1
+
+  # Service locator / dependency injection
+  get_it: ^8.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

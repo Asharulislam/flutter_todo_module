@@ -1,30 +1,28 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Unit tests for the Todos feature.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:flutter_todo/main.dart';
+import 'package:flutter_todo/features/todos/presentation/cubit/todo_filter.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('TodoFilter query mapping', () {
+    test('all → no query constraints', () {
+      expect(TodoFilter.all.completedQuery, isNull);
+      expect(TodoFilter.all.importantQuery, isNull);
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('active → completed=false', () {
+      expect(TodoFilter.active.completedQuery, isFalse);
+      expect(TodoFilter.active.importantQuery, isNull);
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('completed → completed=true', () {
+      expect(TodoFilter.completed.completedQuery, isTrue);
+      expect(TodoFilter.completed.importantQuery, isNull);
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('important → important=true', () {
+      expect(TodoFilter.important.completedQuery, isNull);
+      expect(TodoFilter.important.importantQuery, isTrue);
+    });
   });
 }
