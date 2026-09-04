@@ -157,7 +157,7 @@ class TodoRemoteDataSourceImpl implements TodoRemoteDataSource {
     }
 
     return ServerException(
-      error.message ?? 'Request failed',
+      error.message ?? error.error?.toString() ?? 'Request failed',
       statusCode: error.response?.statusCode,
     );
   }
