@@ -1,3 +1,5 @@
+import 'package:flutter/services.dart';
+
 /// Supplies the bearer token attached to every outgoing API request.
 ///
 /// Authentication is owned by the Android native side of this module, so the
@@ -15,4 +17,22 @@ class NoAuthTokenProvider implements AuthTokenProvider {
 
   @override
   Future<String?> getToken() async => null;
+}
+
+/// Reads the token from the Android host app via the `getToken` method on
+/// the `com.todo.myapplication/auth` MethodChannel set up in `MyApplication`.
+class MethodChannelAuthTokenProvider implements AuthTokenProvider {
+  MethodChannelAuthTokenProvider({MethodChannel? channel})
+    : _channel = channel ?? const MethodChannel('com.todo.myapplication/auth');
+
+  final MethodChannel _channel;
+
+  @override
+  Future<String?> getToken() async {
+    try {
+      return await _channel.invokeMethod<String>('getToken');
+    } on PlatformException {
+      return null;
+    }
+  }
 }

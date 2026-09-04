@@ -20,9 +20,8 @@ Future<void> initDependencies() async {
   // ---------------------------------------------------------------------------
   // Core / infrastructure
   // ---------------------------------------------------------------------------
-  // TODO: swap for the native-backed implementation once the Android token
   // bridge is available.
-  sl.registerLazySingleton<AuthTokenProvider>(NoAuthTokenProvider.new);
+  sl.registerLazySingleton<AuthTokenProvider>(MethodChannelAuthTokenProvider.new);
   sl.registerLazySingleton<DioClient>(
     () => DioClient(tokenProvider: sl()),
   );

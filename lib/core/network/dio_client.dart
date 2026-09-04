@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 
 import '../constants/api_constants.dart';
 import 'api_interceptors.dart';
@@ -27,7 +28,16 @@ class DioClient {
 
     _dio.interceptors.add(AuthInterceptor(tokenProvider));
     if (kDebugMode) {
-      _dio.interceptors.add(LoggingInterceptor());
+      _dio.interceptors.add(
+        PrettyDioLogger(
+          requestHeader: true,
+          requestBody: true,
+          responseHeader: false,
+          responseBody: true,
+          error: true,
+          compact: true,
+        ),
+      );
     }
   }
 
