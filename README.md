@@ -23,6 +23,104 @@ The host app is a normal Android app (Compose UI, `NavHost` with
 `login` / `signup` / `home` routes). From `HomeScreen`, a button launches the
 Flutter module's UI as a second `Activity` inside the same process.
 
+## Build-time wiring (Gradle)
+
+This project does **not** use the "textbook" add-to-app setup where the host
+app's `settings.gradle` source-includes this module's local `.android`
+directory (`include ':flutter'` pointed at a relative path). Instead, this
+module is built as a standalone **AAR and published to a private Maven repo
+(GitHub Packages)**, and the host app just depends on it like any ordinary
+third-party library. That fully decouples the two builds — the host app
+never needs Flutter tooling installed to build.
+
+**`flutter_todo/build.gradle`** (this repo, root — not the auto-generated
+`.android/**` Gradle files) applies `maven-publish` and declares the
+publication:
+
+```gradle
+plugins { id 'maven-publish' }
+
+publishing {
+    publications {
+        release(MavenPublication) {
+            groupId = 'com.example.flutter_todo'
+            artifactId = 'flutter_release'
+            version = '1.6'
+            artifact("build/host/outputs/repo/com/example/flutter_todo/flutter_release/1.0/flutter_release-1.0.aar")
+            pom.withXml { /* adds io.flutter engine artifacts as POM dependencies */ }
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/Asharulislam/flutter_todo_module")
+            credentials {
+                username = project.findProperty("gpr.user")
+                password = project.findProperty("gpr.key")
+            }
+        }
+    }
+}
+```
+
+Note the `artifact(...)` path is hardcoded to `.../1.0/flutter_release-1.0.aar`
+— that's not a stale version number, that's just the fixed local filename
+`flutter build aar` always produces regardless of what version you publish
+under. The `version = '1.6'` field is what consumers actually see; it's
+fully decoupled from that local build output name.
+
+**`TodoApp/settings.gradle.kts`** (host app, at
+`/Users/macbook/Documents/android/TodoApp`) adds two extra Maven repos on
+top of `google()`/`mavenCentral()`:
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+        maven {
+            url = uri("https://maven.pkg.github.com/Asharulislam/flutter_todo_module")
+            credentials {
+                username = providers.gradleProperty("gpr.user").get()
+                password = providers.gradleProperty("gpr.key").get()
+            }
+        }
+    }
+}
+```
+
+- `download.flutter.io` resolves the `io.flutter:flutter_embedding_release`
+  and per-ABI engine artifacts that this module's published POM depends on.
+- The GitHub Packages repo is where the module's own AAR was published to.
+
+`gpr.user` / `gpr.key` (a GitHub PAT with `read:packages` / `write:packages`
+scope) live in `~/.gradle/gradle.properties` **globally on the machine**,
+not committed in either project — keep it that way.
+
+**`TodoApp/app/build.gradle.kts`** then consumes the module exactly like any
+other library:
+
+```kotlin
+debugImplementation("com.example.flutter_todo:flutter_release:1.6")
+releaseImplementation("com.example.flutter_todo:flutter_release:1.6")
+```
+
+### Publishing a new version of the Flutter module
+
+Whenever `flutter_todo` changes and the host app needs to pick it up:
+
+1. `flutter build aar` — builds the AAR locally (in `flutter_todo/`).
+2. Bump `version` in `flutter_todo/build.gradle` (e.g. `1.6` → `1.7`).
+3. `./gradlew publish` (from `flutter_todo/`) — pushes it to GitHub Packages
+   under the new version. Requires `gpr.user`/`gpr.key` to be set.
+4. Bump both `implementation(...)` version strings in
+   `TodoApp/app/build.gradle.kts` to match.
+5. Sync and rebuild the host app.
+
+There is no "hot reload" across this boundary — every Dart change requires
+this full publish-and-bump cycle before the host app sees it.
+
 ## How the Flutter engine is embedded
 
 Add-to-app needs a `FlutterEngine` warmed up *before* the user taps into
