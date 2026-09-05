@@ -17,7 +17,7 @@ There are two separate codebases:
 | Project | Owns | Location |
 |---|---|---|
 | `flutter_todo` (this repo) | Todos UI, Dio networking, DI | here |
-| Native Android host app (`com.todo.myapplication`) | Login/signup, token storage (`AuthManager`), app shell (Jetpack Compose) | separate project, not in this repo |
+| Native Android host app (`com.todo.myapplication`) | Login/signup, token storage (`AuthManager`), app shell (Jetpack Compose) | `/Users/macbook/Documents/android/TodoApp` — separate project, not in this repo |
 
 The host app is a normal Android app (Compose UI, `NavHost` with
 `login` / `signup` / `home` routes). From `HomeScreen`, a button launches the
@@ -35,9 +35,6 @@ class MyApplication : Application() {
         super.onCreate()
 
         val flutterEngine = FlutterEngine(this)
-        flutterEngine.dartExecutor.executeDartEntrypoint(
-            DartExecutor.DartEntrypoint.createDefault()
-        )
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -49,10 +46,21 @@ class MyApplication : Application() {
             }
         }
 
+        flutterEngine.dartExecutor.executeDartEntrypoint(
+            DartExecutor.DartEntrypoint.createDefault()
+        )
+
         FlutterEngineCache.getInstance().put("my_engine", flutterEngine)
     }
 }
 ```
+
+Note the order: the `MethodChannel` handler is registered **before**
+`executeDartEntrypoint` starts running Dart's `main()`. That matters because
+`executeDartEntrypoint` kicks off Dart execution essentially concurrently
+with the rest of `onCreate()` — registering the handler first closes off a
+startup race where an early `getToken()` call could otherwise fire before
+anything is listening.
 
 The engine is cached under the key **`"my_engine"`** for the whole app
 lifetime. `HomeScreen` then reuses that exact instance instead of spinning
@@ -78,19 +86,6 @@ This happened once already (`HomeScreen` originally used
 `createDefaultIntent`) — if you add a second way to open the Flutter screen,
 make sure it also goes through `withCachedEngine("my_engine")`.
 
-### Known latent issue — handler registration order
-
-`setMethodCallHandler` is currently registered **after**
-`executeDartEntrypoint` in `MyApplication.onCreate()`. `executeDartEntrypoint`
-starts Dart's `main()` essentially concurrently with the rest of `onCreate()`
-continuing to run — so in principle, if Dart's very first frame called
-`getToken()` before the line below finishes registering the handler, that
-call could race and fail. In practice this hasn't bitten us because nothing
-calls the auth channel until the user navigates to the todos screen, well
-after `onCreate()` finishes. Still, the safer order is handler registration
-*before* `executeDartEntrypoint`. Fix this if the app ever calls `getToken()`
-eagerly on startup.
-
 ## Auth token flow
 
 There is exactly one platform channel: **`com.todo.myapplication/auth`**,
@@ -110,6 +105,21 @@ Flutter never creates or refreshes the token — it only reads whatever the
 native `AuthManager` currently has stored. If a request comes back
 unauthenticated, check the native side's stored token before suspecting
 Flutter.
+
+### Where the token actually comes from (native side)
+
+`AuthManager` (`com.todo.myapplication.AuthManager`, in the host app project
+at `/Users/macbook/Documents/android/TodoApp`) is plain
+`SharedPreferences("auth", MODE_PRIVATE)` — no encryption, no expiry
+handling. `LoginScreen`/`SignUpScreen` call `AuthManager.login()` /
+`.signup()`, which hit `POST api/auth/login` / `api/auth/register` via
+Retrofit (`RetrofitClient`, `AuthApi.kt`) against the **same backend**
+Flutter's `Dio` client talks to (`todo-backend-app-bfff.onrender.com`). On a
+successful response, the returned JWT is written straight into
+`SharedPreferences` under the key `"token"`. `AuthManager.logout()` just
+clears the whole prefs file. `getToken()` — the method the `MethodChannel`
+handler calls — is a synchronous `SharedPreferences.getString("token", null)`
+read, nothing more.
 
 ### Debugging the bridge
 
